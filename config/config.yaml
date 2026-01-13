@@ -1,0 +1,57 @@
+app:
+  name: "ML AutoML Suite"
+  version: "1.0.0"
+  debug: true
+
+database:
+  mongodb:
+    host: "localhost"
+    port: 27017
+    database: "ml_suite"
+    username: ""
+    password: ""
+  
+  postgresql:
+    host: "localhost"
+    port: 5432
+    database: "ml_suite"
+    username: "postgres"
+    password: ""
+
+ml:
+  models:
+    regression:
+      - "linear_regression"
+      - "svr"
+      - "decision_tree"
+    classification:
+      - "logistic_regression"
+      - "svc"
+      - "decision_tree"
+  
+  hyperparameter_tuning:
+    method: "grid_search"  # or "random_search"
+    cv_folds: 5
+    scoring:
+      regression: "r2"
+      classification: "accuracy"
+  
+  preprocessing:
+    missing_value_strategy: "auto"  # mean, median, mode, auto
+    scaling: true
+    encoding: "auto"  # onehot, label, auto
+
+storage:
+  models_path: "./models"
+  data_path: "./data"
+  reports_path: "./reports"
+
+logging:
+  level: "INFO"
+  file: "./logs/app.log"
+  format: "{time} | {level} | {module} | {message}"
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins: ["*"]
