@@ -4,6 +4,7 @@ FastAPI Application Entry Point
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from pathlib import Path
 import sys
 
@@ -21,11 +22,30 @@ config = Config()
 # Setup logging
 logger = setup_logging(config.config)
 
-# Create FastAPI app
+
+# Lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan - startup and shutdown"""
+    # Startup
+    logger.info("Starting ML AutoML Suite API")
+    Path("models").mkdir(exist_ok=True)
+    Path("data").mkdir(exist_ok=True)
+    Path("logs").mkdir(exist_ok=True)
+    Path("reports").mkdir(exist_ok=True)
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down ML AutoML Suite API")
+
+
+# Create FastAPI app with lifespan
 app = FastAPI(
     title=config.get('app.name', 'ML AutoML Suite'),
     version=config.get('app.version', '1.0.0'),
-    description="Comprehensive Machine Learning Platform"
+    description="Comprehensive Machine Learning Platform",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -41,23 +61,6 @@ app.add_middleware(
 # Include routers
 app.include_router(router, prefix="/api", tags=["ML Operations"])
 app.include_router(metrics_router, prefix="/api", tags=["Monitoring"])
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Startup event"""
-    logger.info("Starting ML AutoML Suite API")
-    # Create necessary directories
-    Path("models").mkdir(exist_ok=True)
-    Path("data").mkdir(exist_ok=True)
-    Path("logs").mkdir(exist_ok=True)
-    Path("reports").mkdir(exist_ok=True)
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown event"""
-    logger.info("Shutting down ML AutoML Suite API")
 
 
 @app.get("/")

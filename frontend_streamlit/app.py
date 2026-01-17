@@ -91,12 +91,13 @@ with tab1:
 
             buffer = BytesIO()
             joblib.dump(result, buffer)
-            buffer.seek(0)
+            buffer_bytes = buffer.getvalue()
 
             st.download_button(
                 "Download Model",
-                data=buffer,
-                file_name="best_model.joblib"
+                data=buffer_bytes,
+                file_name="best_model.joblib",
+                mime="application/octet-stream"
             )
 
 # ======================= PREDICT TAB =======================
