@@ -1,128 +1,152 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import joblib
+from io import BytesIO
+
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.svm import SVR, SVC
 from sklearn.metrics import mean_squared_error, accuracy_score
 from sklearn.preprocessing import LabelEncoder
-import joblib
-import numpy as np
 
-st.set_page_config(page_title="AutoML Suite", layout="wide")
+st.set_page_config(page_title="AutoML Mini Suite", layout="wide")
 st.title("🤖 AutoML Mini Suite")
 
-# Tabs for Train and Predict
 tab1, tab2 = st.tabs(["Train Model", "Predict"])
 
-# ------------------- TRAIN TAB -------------------
+# ======================= TRAIN TAB =======================
 with tab1:
     st.header("Train a New Model")
 
-    train_file = st.file_uploader("Upload your training CSV file", type=["csv"], key="train")
+    train_file = st.file_uploader(
+        "Upload training CSV file",
+        type=["csv"]
+    )
 
     if train_file:
         df = pd.read_csv(train_file)
-        st.success("Training file uploaded!")
         st.dataframe(df.head())
 
-        target_col = st.selectbox("Select Target Column", df.columns)
+        target_col = st.selectbox(
+            "Select target column",
+            df.columns
+        )
 
-        if st.button("Train Model"):
-            X = df.drop(columns=[target_col])
-            y = df[target_col]
+        is_classification = df[target_col].dtype == "object"
 
-            # Handle missing values
-            X = X.fillna(0)
-            y = y.fillna(0)
+        if is_classification:
+            model_choice = st.selectbox(
+                "Select classification model",
+                ["Logistic Regression", "SVM"]
+            )
+        else:
+            model_choice = st.selectbox(
+                "Select regression model",
+                ["Linear Regression", "SVR"]
+            )
 
-            # Encode categorical features
-            X_encoded = pd.get_dummies(X)
+        @st.cache_resource
+        def train_model(df, target_col, model_choice):
+            X = df.drop(columns=[target_col]).fillna(0)
+            y = df[target_col].fillna(0)
 
-            # Encode target if categorical
-            le = None
+            X = pd.get_dummies(X)
+
+            label_encoder = None
             if y.dtype == "object":
-                le = LabelEncoder()
-                y = le.fit_transform(y)
-                model_type = "Classification"
-                model_choice = st.selectbox("Select Classification Model", ["Logistic Regression", "SVM"])
+                label_encoder = LabelEncoder()
+                y = label_encoder.fit_transform(y)
+
                 model = LogisticRegression(max_iter=1000) if model_choice == "Logistic Regression" else SVC()
             else:
-                model_type = "Regression"
-                model_choice = st.selectbox("Select Regression Model", ["Linear Regression", "SVR"])
                 model = LinearRegression() if model_choice == "Linear Regression" else SVR()
 
             X_train, X_test, y_train, y_test = train_test_split(
-                X_encoded, y, test_size=0.2, random_state=42
+                X, y, test_size=0.2, random_state=42
             )
 
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
 
-            st.subheader("📊 Results")
-            st.write("Model Type:", model_type)
-            st.write("Selected Model:", model_choice)
-
-            if model_type == "Regression":
-                rmse = np.sqrt(mean_squared_error(y_test, preds))
-                st.success(f"RMSE: {rmse:.4f}")
+            metrics = {}
+            if label_encoder:
+                metrics["Accuracy"] = accuracy_score(y_test, preds)
             else:
-                acc = accuracy_score(y_test, preds)
-                st.success(f"Accuracy: {acc:.4f}")
+                metrics["RMSE"] = np.sqrt(mean_squared_error(y_test, preds))
 
-            # Save model package
-            model_package = {
+            return {
                 "model": model,
-                "feature_columns": X_encoded.columns.tolist(),
-                "label_encoder": le
+                "feature_columns": X.columns.tolist(),
+                "label_encoder": label_encoder,
+                "metrics": metrics
             }
-            joblib.dump(model_package, "best_model.joblib")
-            st.success("✅ Model saved as 'best_model.joblib'")
+
+        if st.button("Train Model"):
+            with st.spinner("Training model..."):
+                result = train_model(df, target_col, model_choice)
+
+            st.success("Training completed!")
+
+            for k, v in result["metrics"].items():
+                st.metric(k, f"{v:.4f}")
+
+            buffer = BytesIO()
+            joblib.dump(result, buffer)
+            buffer.seek(0)
+
             st.download_button(
-                label="Download Model",
-                data=open("best_model.joblib", "rb").read(),
+                "Download Model",
+                data=buffer,
                 file_name="best_model.joblib"
             )
 
-# ------------------- PREDICT TAB -------------------
+# ======================= PREDICT TAB =======================
 with tab2:
-    st.header("Make Predictions with Saved Model")
+    st.header("Make Predictions")
 
-    uploaded_model = st.file_uploader("Upload saved model (.joblib)", type=["joblib"], key="model")
-    pred_file = st.file_uploader("Upload CSV for prediction", type=["csv"], key="predict")
+    uploaded_model = st.file_uploader(
+        "Upload saved model (.joblib)",
+        type=["joblib"]
+    )
+
+    pred_file = st.file_uploader(
+        "Upload CSV for prediction",
+        type=["csv"]
+    )
 
     if uploaded_model and pred_file:
         model_package = joblib.load(uploaded_model)
+
         model = model_package["model"]
         feature_columns = model_package["feature_columns"]
-        le = model_package["label_encoder"]
+        label_encoder = model_package["label_encoder"]
 
         df_pred = pd.read_csv(pred_file)
-        st.subheader("Prediction Data Preview")
         st.dataframe(df_pred.head())
 
-        # Encode categorical features same as training
         df_encoded = pd.get_dummies(df_pred)
-        # Add missing columns if necessary
+
         for col in feature_columns:
-            if col not in df_encoded.columns:
+            if col not in df_encoded:
                 df_encoded[col] = 0
-        df_encoded = df_encoded[feature_columns]  # Ensure same column order
+
+        df_encoded = df_encoded[feature_columns]
 
         predictions = model.predict(df_encoded)
 
-        # If classification with label encoder
-        if le:
-            predictions = le.inverse_transform(predictions.astype(int))
+        if label_encoder:
+            predictions = label_encoder.inverse_transform(predictions.astype(int))
 
-        st.subheader("Predictions")
-        st.dataframe(pd.DataFrame(predictions, columns=["Prediction"]))
+        result_df = df_pred.copy()
+        result_df["Prediction"] = predictions
 
-        # Allow download
-        pred_df = df_pred.copy()
-        pred_df["Prediction"] = predictions
+        st.dataframe(result_df)
+
         st.download_button(
-            label="Download Predictions",
-            data=pred_df.to_csv(index=False).encode("utf-8"),
+            "Download Predictions",
+            data=result_df.to_csv(index=False),
             file_name="predictions.csv"
         )
+
 
