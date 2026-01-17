@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import joblib
 from io import BytesIO
-
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.svm import SVR, SVC
@@ -33,16 +32,17 @@ with tab1:
             df.columns
         )
 
-        is_classification = df[target_col].dtype == "object"
+        y_sample = df[target_col]
+        is_classification = y_sample.dtype == "object"
 
         if is_classification:
             model_choice = st.selectbox(
-                "Select classification model",
+                "Select Classification Model",
                 ["Logistic Regression", "SVM"]
             )
         else:
             model_choice = st.selectbox(
-                "Select regression model",
+                "Select Regression Model",
                 ["Linear Regression", "SVR"]
             )
 
@@ -50,14 +50,12 @@ with tab1:
         def train_model(df, target_col, model_choice):
             X = df.drop(columns=[target_col]).fillna(0)
             y = df[target_col].fillna(0)
-
             X = pd.get_dummies(X)
 
             label_encoder = None
             if y.dtype == "object":
                 label_encoder = LabelEncoder()
                 y = label_encoder.fit_transform(y)
-
                 model = LogisticRegression(max_iter=1000) if model_choice == "Logistic Regression" else SVC()
             else:
                 model = LinearRegression() if model_choice == "Linear Regression" else SVR()
@@ -105,15 +103,8 @@ with tab1:
 with tab2:
     st.header("Make Predictions")
 
-    uploaded_model = st.file_uploader(
-        "Upload saved model (.joblib)",
-        type=["joblib"]
-    )
-
-    pred_file = st.file_uploader(
-        "Upload CSV for prediction",
-        type=["csv"]
-    )
+    uploaded_model = st.file_uploader("Upload saved model (.joblib)", type=["joblib"])
+    pred_file = st.file_uploader("Upload CSV for prediction", type=["csv"])
 
     if uploaded_model and pred_file:
         model_package = joblib.load(uploaded_model)
@@ -142,11 +133,9 @@ with tab2:
         result_df["Prediction"] = predictions
 
         st.dataframe(result_df)
-
         st.download_button(
             "Download Predictions",
             data=result_df.to_csv(index=False),
             file_name="predictions.csv"
         )
-
 
